@@ -14,9 +14,9 @@ import { getAzureOpenAiTokenProvider, getCredentials } from '../security';
 
 export async function postDocuments(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   const storageUrl = process.env.AZURE_STORAGE_URL;
-  const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME;
   const azureOpenAiEndpoint = process.env.AZURE_OPENAI_API_ENDPOINT;
-
+  const session=request.headers.get('sess-id') ? request.headers.get('sess-id') : '' ;
+  const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME;
   try {
     // Get the uploaded file from the request
     const parsedForm = await request.formData();
@@ -26,7 +26,7 @@ export async function postDocuments(request: HttpRequest, context: InvocationCon
     }
 
     const file = parsedForm.get('file') as File;
-    const filename = file.name;
+    const filename = session+"/"+file.name;
 
     // Extract text from the PDF
     const loader = new PDFLoader(file, {
@@ -48,7 +48,7 @@ export async function postDocuments(request: HttpRequest, context: InvocationCon
       const azureADTokenProvider = getAzureOpenAiTokenProvider();
 
       // Initialize embeddings model and vector database
-      const embeddings = new AzureOpenAIEmbeddings({ azureADTokenProvider });
+      const embeddings = new AzureOpenAIEmbeddings({ azureADTokenProvider});
       await AzureAISearchVectorStore.fromDocuments(documents, embeddings, { credentials });
     } else {
       // If no environment variables are set, it means we are running locally

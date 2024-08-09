@@ -9,7 +9,8 @@ import { type ParsedMessage, parseMessageIntoHtml } from '../message-parser.js';
 import sendSvg from '../../assets/send.svg?raw';
 import questionSvg from '../../assets/question.svg?raw';
 import newChatSvg from '../../assets/new-chat.svg?raw';
-
+import uploadSVG from '../../assets/upload.svg?raw';
+export const apiBaseUrl: string = import.meta.env.VITE_API_URL || '';
 export type ChatComponentState = {
   hasError: boolean;
   isLoading: boolean;
@@ -30,6 +31,7 @@ export type ChatComponentOptions = ChatRequestOptions & {
     user: string;
     errorMessage: string;
     newChatButton: string;
+    fileUpload: string;
     retryButton: string;
   };
 };
@@ -46,14 +48,15 @@ export const defaultOptions: ChatComponentOptions = {
   messages: [],
   strings: {
     promptSuggestionsTitle: 'Ask anything or try an example',
-    citationsTitle: 'Citations:',
+    citationsTitle: 'Reference:',
     followUpQuestionsTitle: 'Follow-up questions:',
     chatInputPlaceholder: 'Ask me anything...',
-    chatInputButtonLabel: 'Send question',
-    assistant: 'Support Assistant',
+    chatInputButtonLabel: 'Query',
+    assistant: 'Sesio Support',
     user: 'You',
     errorMessage: 'We are currently experiencing an issue.',
     newChatButton: 'New chat',
+    fileUpload: 'Upload File',
     retryButton: 'Retry',
   },
 };
@@ -62,12 +65,12 @@ export const defaultOptions: ChatComponentOptions = {
  * A chat component that allows the user to ask questions and get answers from an API.
  * The component also displays default prompts that the user can click on to ask a question.
  * The component is built as a custom element that extends LitElement.
- *
- * Labels and other aspects are configurable via the `option` property.
- * @element azc-chat
- * @fires messagesUpdated - Fired when the message thread is updated
- * @fires stateChanged - Fired when the state of the component changes
- * */
+*
+* Labels and other aspects are configurable via the `option` property.
+* @element azc-chat
+* @fires messagesUpdated - Fired when the message thread is updated
+* @fires stateChanged - Fired when the state of the component changes
+* */
 @customElement('azc-chat')
 export class ChatComponent extends LitElement {
   @property({
@@ -75,15 +78,17 @@ export class ChatComponent extends LitElement {
     converter: (value) => ({ ...defaultOptions, ...JSON.parse(value ?? '{}') }),
   })
   options: ChatComponentOptions = defaultOptions;
-
+  
   @property() question = '';
   @property({ type: Array }) messages: AIChatMessage[] = [];
   @state() protected hasError = false;
   @state() protected isLoading = false;
+  @state() protected uploading = false;
   @state() protected isStreaming = false;
   @query('.messages') protected messagesElement!: HTMLElement;
   @query('.chat-input') protected chatInputElement!: HTMLElement;
-
+  
+  
   async onSuggestionClicked(suggestion: string) {
     this.question = suggestion;
     await this.onSendClicked();
@@ -180,6 +185,7 @@ export class ChatComponent extends LitElement {
       }
     }, 0);
   }
+  
 
   protected renderSuggestions = (suggestions: string[]) => html`
     <section class="suggestions-container">
@@ -242,7 +248,54 @@ export class ChatComponent extends LitElement {
       </div>
     </div>
   `;
+ 
+  handleFileUpload = async (event) => {
+    const file = event.target.files[0]; // Get the selected file
+    if (file) {
+      this.uploading=true;
+      this.isLoading=true;
+       this.isStreaming=true;
+      console.log('Selected file:', file);
+  
+      try {
+        // Directly use the File object in FormData
+        this.messages.push({ role:"user", content:file.name })
+        const formData = new FormData();
+        formData.append('file', file);
+  
+        // Upload the file using fetch
+        const uploadUrl = 'https://func-api-bxoko5stxrxxm.azurewebsites.net/api/documents';
+        const response = await fetch(uploadUrl, {
+          method: 'POST',
+          body: formData, 
+          // headers:{
+          //   'sess-id':this.generateUID()
+          // }
+        });
+  
+        const responseData = await response.json();
+        console.log(response)
+        if (response.ok) {
+          this.messages.push({ role:"assistant", content:"File uploaded successfully" })
+          console.log('File uploaded successfully:', responseData);
+        } else {
+          console.error('File upload failed:', responseData);
+        }
+      } catch (error) {
+        console.error('Error during file upload:', error);
+      }
+      this.uploading=false;
+      this.isLoading=false;
+      this.isStreaming=false;
+    }
 
+  }
+  
+  generateUID() {
+    return 'sid-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now().toString(36);
+}
+  
+ 
   protected renderCitation = (citation: string, index: number) =>
     html`<button
       class="citation"
@@ -277,10 +330,12 @@ export class ChatComponent extends LitElement {
           </div>
         `
       : nothing;
-
+     
   protected renderChatInput = () => html`
-    <div class="chat-input">
-      <button
+  <div>
+  <slot name="loader"><div class="${this.uploading? 'loader-animation1' : ''}"></div></slot>
+  <div class="chat-input">
+      <button type="button"
         class="button new-chat-button"
         @click=${() => {
           this.messages = [];
@@ -289,7 +344,24 @@ export class ChatComponent extends LitElement {
         .disabled=${this.messages?.length === 0 || this.isLoading || this.isStreaming}
       >
         ${unsafeSVG(newChatSvg)}
-      </button>
+   
+   </button>     
+       
+        <button
+        type="button"
+    class="button new-chat-button"
+    @click=${() => {
+      var input=document.createElement('input')
+      input.type="file";
+      input.onchange=this.handleFileUpload;
+      // console.log(apiBaseUrl);
+      input.click(); // Trigger file input click
+    }}
+    title=${this.options.strings.fileUpload}
+    .disabled=${ this.isLoading || this.isStreaming}
+  >
+    ${unsafeSVG(uploadSVG)}
+  </button>
       <form class="input-form">
         <textarea
           class="text-input"
@@ -311,6 +383,7 @@ export class ChatComponent extends LitElement {
           ${unsafeSVG(sendSvg)}
         </button>
       </form>
+    </div>
     </div>
   `;
 
@@ -336,7 +409,7 @@ export class ChatComponent extends LitElement {
   static override styles = css`
     :host {
       /* Base properties */
-      --primary: var(--azc-primary, #07f);
+      --primary: #000;
       --error: var(--azc-error, #e30);
       --text-color: var(--azc-text-color, #000);
       --text-invert-color: var(--azc--text-invert-color, #fff);
@@ -480,7 +553,7 @@ export class ChatComponent extends LitElement {
     .message {
       position: relative;
       width: auto;
-      max-width: 70%;
+      max-width: 100%;
       border-radius: var(--border-radius);
       padding: var(--space-xl);
       margin-bottom: var(--space-xl);
@@ -596,6 +669,7 @@ export class ChatComponent extends LitElement {
       box-shadow: 0 calc(-1 * var(--half-space-xl)) var(--half-space-xl) var(--bg);
       display: flex;
       gap: var(--space-md);
+      align-items: center;
     }
     .new-chat-button {
       width: 48px;
@@ -651,6 +725,16 @@ export class ChatComponent extends LitElement {
       border-radius: var(--border-radius);
       overflow: hidden;
       background-color: var(--primary);
+      transform: scaleX(0);
+      transform-origin: center left;
+      animation: cubic-bezier(0.85, 0, 0.15, 1) 2s infinite load-animation;
+    }
+    .loader-animation1 {
+      width: 100%;
+      height: 6px;
+      border-radius: var(--border-radius);
+      overflow: hidden;
+      background-color: black;
       transform: scaleX(0);
       transform-origin: center left;
       animation: cubic-bezier(0.85, 0, 0.15, 1) 2s infinite load-animation;

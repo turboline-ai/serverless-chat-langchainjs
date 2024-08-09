@@ -12,7 +12,7 @@
     "build:webapp": "npm run build --workspace=webapp",
     "build:api": "npm run build --workspace=api",
     "clean": "npm run clean --workspaces --if-present",
-    "upload:docs": "node scripts/upload-documents.js http://localhost:7071",
+    "upload:docs": "node scripts/upload-documents.js https://func-api-bxoko5stxrxxm.azurewebsites.net",
     "lint": "xo",
     "lint:fix": "xo --fix",
     "format": "prettier --list-different --write .",
